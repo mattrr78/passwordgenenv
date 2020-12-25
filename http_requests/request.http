@@ -1,0 +1,2 @@
+GET http://localhost:8080/api/password
+# GET http://demo.box1.com/api/password

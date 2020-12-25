@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: password-gen-env-prod
+  labels:
+    env: prod
+spec:
+  volumes:
+    - name: pv-storage
+      persistentVolumeClaim:
+        claimName: pv-claim
+  containers:
+    - name: password-gen-env
+      image: localhost:32000/password-gen-env:v1.0.0
+      volumeMounts:
+        - mountPath: "/logs"
+          name: pv-storage
+      env:
+        - name: NAME
+          valueFrom:
+            configMapKeyRef:
+              name: password-policy
+              key: prod.name
+        - name: PASSWORD_COUNT
+          valueFrom:
+            configMapKeyRef:
+              name: password-policy
+              key: prod.password.count
+        - name: PASSWORD_MINIMUM_LENGTH
+          valueFrom:
+            configMapKeyRef:
+              name: password-policy
+              key: prod.password.minimumLength
+        - name: PASSWORD_MAXIMUM_LENGTH
+          valueFrom:
+            configMapKeyRef:
+              name: password-policy
+              key: prod.password.maximumLength

@@ -1,0 +1,9 @@
+config:
+  target: http://demo.box1.com/api
+  phases:
+    - duration: 2
+      arrivalRate:  10
+scenarios:
+  - flow:
+    - get:
+        url:  "/password"

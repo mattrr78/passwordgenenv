@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: http-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/limit-rps: "1"
+spec:
+  rules:
+    - host: "prod.box1.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: password-gen-env-prod
+                port:
+                  number: 8080
+    - host: "demo.box1.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: password-gen-env-demo
+                port:
+                  number: 8080
