@@ -5,4 +5,4 @@
 * Persistent Volume
 * Ingress
 
-Click [here](https://mattrr78.github.io/passwordgenenv/index.html) for write up.
+Click [here](https://mattrr78.github.io/passwordgenenv/) for write up.
