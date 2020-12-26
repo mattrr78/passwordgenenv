@@ -1,156 +1,213 @@
-Improvements to the first project in this article include:
-    Passing different configuration values to individual pods (ConfigMap)
-    Log data outside of pods (Persistent Volume)
-    Route by subdomain to pods and set a rate limit on requests (Ingress)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Kubernetes Load Balancing Demo</title>
+    <style>
+        .mono  {
+            font-family: monospace
+        }
+        .note  {
+            background-color: #E0E0E0;
+        }
+    </style>
+</head>
+<body style="font-family: sans-serif; color: #505050; font-size: 15px; padding: 2% 10%">
+<h1>
+    Password Generator Improvements (ConfigMap, YAML, Persistent Volume, and Ingress)
+</h1>
+<p style="font-style: italic">Written by Matt Rosenberger. Originally published on December 26th, 2020.
+<div class="note">
+<h3>Improvements to the first project in this article include:</h3>
+<ul>
+    <li>Passing different configuration values to individual pods (ConfigMap)
+    <li>Switch to Declarative Management/Configuration (YAML)</li>
+    <li>Log data outside of pods (Persistent Volume)
+    <li>Route by subdomain to pods and set a rate limit on requests (Ingress)
+</ul>
+</div>
 
-Reset
-If you followed through the steps from the first project, then call the following commands to remove the service and
-deployment from microk8s:
-    kubectl delete service/password-gen
-    kubectl delete deployment.apps/password-gen
-
-Instead of doing the above, I usually keep a pristine copy of my Ubuntu VM and make full copies of it to work in.  Also,
-only one VM will be used in this article.
-
-Project Change
+<h2>Reset</h2>
+If you followed through the steps from the
+<a href="https://mattrr78.github.io/passwordgen/" target="_blank">first project</a>, then call the following commands
+to remove the service and deployment from microk8s:
+<pre>  kubectl delete service/password-gen</pre>
+<pre>  kubectl delete deployment.apps/password-gen</pre>
+<p>
+Instead of doing the above, I usually keep a pristine copy of my Ubuntu VM, delete the VM I was working in. and make
+full copies of it to work in.  Also, only one VM will be used in this article.
+<h2>Project Change</h2>
+<p>
 The first project required passing in a request body consisting of the password policy (min/max character length,
 number of passwords, etc).  Code has changed to fetch password policy from environment variables and API is now an
 easy GET request with no arguments or request body.
-
+<p>
 Also, logging to file was added using NAME environment variable as log file name.  The Dockerfile was changed to create
 a logs folder to store the log file.
-
+<p>
 Build, create the Docker image, and push to microk8s registry.
-
-ConfigMap
+<p>
+<h2>ConfigMap</h2>
+<a href="images/ConfigMap.png" target="_blank">
+    <img src="images/ConfigMap.png" style="width: 300px; height: auto;" alt="ConfigMap"/>
+</a>
+<p>
 2 pods will be running on the node:  one for production use (paid version) and one for demo use (free version).  The
 production pod will allow 10 passwords to be generated between 10 and 50 characters per request.  The demo pod will
 only allow 1 password between 6 and 8 characters per request.  We have refactored fetching password policy values
 from environment variables, so how do we pass in the password policy values to the pods' environment variables?
-
+<p>
 ConfigMap is a Kubernetes resource used to store data in key/value format.  With a ConfigMap created, the pod
 configuration can map environment variable names to ConfigMap keys.
-
+<p>
 To create a ConfigMap from the command prompt:
-
-kubectl create configmap password-policy \
---from-literal=prod.name=prod \
---from-literal=prod.password.count=10 \
---from-literal=prod.password.minimumLength=10 \
---from-literal=prod.password.maximumLength=50 \
---from-literal=demo.name=demo \
---from-literal=demo.password.count=1 \
---from-literal=demo.password.minimumLength=6 \
---from-literal=demo.password.maximumLength=8
-
+<p>
+<pre>
+ kubectl create configmap password-policy \
+     --from-literal=prod.name=prod \
+     --from-literal=prod.password.count=10 \
+     --from-literal=prod.password.minimumLength=10 \
+     --from-literal=prod.password.maximumLength=50 \
+     --from-literal=demo.name=demo \
+     --from-literal=demo.password.count=1 \
+     --from-literal=demo.password.minimumLength=6 \
+     --from-literal=demo.password.maximumLength=8
+</pre>
+<p>
 Now run the following to view the keys/values:
-
-kubectl describe cm/password-policy
-
-Declarative Management (YAML)
+<p>
+<pre> kubectl describe cm/password-policy</pre>
+<p>
+<h2>Declarative Management (YAML)</h2>
+<p>
 Up to this point we've been able to get away with kubectl for creating/updating k8s resources, but as we continue with
 learning new types of resources, there won't always be ways of using kubectl to create and configure resources.  The
 favored way to configure k8s is to use YAML files, so lets switch to this preferred approach.
-
-We can extract a YAML representation of the ConfigMap we just created by calling:
-
-kubectl get cm/password-policy -o yaml
-
-The most important parts of this YAML configuration are:  apiVersion, kind, metadata -> name, and data (the rest is
-microk8s noise).  Copy just these parts to a file and remove the ConfigMap by invoking:
-
-kubectl delete cm/password-policy
-
+<p>
+We can extract the YAML representation of the ConfigMap we just created by calling:
+<p>
+<pre> kubectl get cm/password-policy -o yaml</pre>
+<p>
+The most important parts of this YAML configuration are:
+    <span class="mono"> apiVersion, kind, metadata -> name, and data </span>(the rest is microk8s noise).
+Copy just these parts to a file and remove the ConfigMap by invoking:
+<p>
+<pre> kubectl delete cm/password-policy</pre>
+<p>
 To create the ConfigMap from the YAML file, call:
-
-kubectl apply -f password-policy-cm.yaml
-
-You can also delete resources referenced in the YAML file by running kubectl delete -f password-policy-cm.yaml
-
-Persistent Volume
+<p>
+<pre> kubectl apply -f password-policy-cm.yaml</pre>
+<p>
+You can also delete resources referenced in the YAML file by running:
+<pre> kubectl delete -f password-policy-cm.yaml</pre>
+<p>
+<h2>Persistent Volume</h2>
+<p>
 Installing the pods that use this docker image will log to a file inside of its container.  When the pod gets restarted,
 all of the log data is lost.  How do we preserve data outside the lifecycle of a container?
-
+<p>
+    <a href="images/Volume.png" target="_blank">
+        <img src="images/Volume.png" style="width: 400px; height: auto;" alt="Volume"/>
+    </a>
+<p>
 Persistent Volume is the resource used to read/write data to/from for k8s containers.  There are many types of volumes
 to choose that are required for a multi-node k8s cluster (awsElasticBlockStore, azureDisk, gcePersistentDisk, glusterfs,
-nfs), but since this scenario is using one node, hostPath will be used to mount the container's /logs directory to the
-VirtualBox VM's /mnt/data directory.
-
-Create the /mnt/data directory and then run the following to create the Persistent Volume:
-
-kubectl apply -f volume.yaml
-
+nfs), but since this scenario is using one node, hostPath will be used to mount the container's
+    <span class="mono"> /logs </span>directory to the
+    VirtualBox VM's<span class="mono"> /mnt/data </span>directory.
+<p>
+Create the<span class="mono"> /mnt/data directory </span>and then run the following to create the Persistent Volume:
+<p>
+<pre> kubectl apply -f volume.yaml</pre>
+<p>
 From the diagram, we need to create a Persistent Volume Claim.  Pods cannot be configured to use a Volume directly.
 Pods are configured to use a Persistent Volume Claim that will then use the Persistent Volume.  Run the following to
 create the Persistent Volume Claim:
-
-kubectl apply -f volume-claim.yaml
-
+<p>
+<pre> kubectl apply -f volume-claim.yaml</pre>
+<p>
 The claim will be matched with the volume we created by matching the value of storageClassName.
-
-Pod Creation
+<p>
+<h2>Pod Creation</h2>
+<p>
 We can FINALLY create the pods now that ConfigMap and PersistentVolume have been defined!  Run the following:
-
-kubectl apply -f prod-pod.yaml
-kubectl apply -f demo-pod.yaml
-
+<p>
+<pre> kubectl apply -f prod-pod.yaml</pre>
+<pre> kubectl apply -f demo-pod.yaml</pre>
+<p>
 The pods are configured to use the volume claim and mount its /logs folder to the volume.  We pass in environment
 variable values to the container via our ConfigMap.  After the pods are started, run:
-
-ls /mnt/data
-
-You should see the demo.log and prod.log files.
-
-Routing
+<p>
+<pre> ls /mnt/data</pre>
+<p>
+You should see the demo.log and prod.log files, which means our PersistentVolume configuration works!
+<p>
+<h2>Routing</h2>
+<p>
 We can't test the REST service just yet.  We still need to expose the pods using services, so run:
-
-kubectl apply -f prod-service.yaml
-kubectl apply -f demo-service.yaml
-
+<p>
+<pre> kubectl apply -f prod-service.yaml</pre>
+<pre> kubectl apply -f demo-service.yaml</pre>
+<p>
 Unlike the first project, these services are not of type NodePort, so it does not do port forwarding from the k8s host
 port to the service port.  What we're going to do this time is setup a reverse proxy to route to these 2 services
 based on the full hostname.  We're also going to put a rate limit on all requests to 1 request per second per client
 address.
-
-Ingress
+<p>
+<h2>Ingress</h2>
+<a href="images/Ingress.png" target="_blank">
+    <img src="images/Ingress.png" style="width: 450px; height: auto;" alt="Ingress"/>
+</a>
+<p>
 Ingress is a k8s resource that manages external access to the services in a cluster, typically HTTP.  There are many
 open source and commercial offerings that implement the open Ingress specification called Ingress Controllers.  We will
 be using the NGINX Ingress Controller because it is shipped with microk8s.  To enable this Ingress Controller, run:
-
-microk8s.enable ingress
-
+<p>
+<pre> microk8s.enable ingress</pre>
+<p>
 To create the Ingress resource with hostname routing and rate limit, run:
-
-kubectl apply -f ingress.yaml
-
+<p>
+<pre> kubectl apply -f ingress.yaml</pre>
+<p>
 You can its listing by running:
-
-kubectl get ingress
-
-Append the following to your /etc/hosts file (For Windows,
-C:\Windows\System32\drivers\etc\hosts) so we can hit demo.box1.com and prod.box1.com locally (Replace 192.168.1.105 with
-your VirtualBox VMs running IP address):
-
+<p>
+<pre> kubectl get ingress</pre>
+<p>
+Append the following to your<span class="mono"> /etc/hosts </span>file (For Windows,
+<span class="mono"> C:\Windows\System32\drivers\etc\hosts</span>) so we can hit demo.box1.com and prod.box1.com locally
+(Replace <span class="mono"> 192.168.1.105 </span>with your VirtualBox VMs running IP address):
+<pre>
 192.168.1.105	prod.box1.com
 192.168.1.105	demo.box1.com
-
-Now try to hit http://prod.box1.com/api/password and http://demo.box1.com/api/password.  You should get one
-6-8 character password from http://demo.box1.com/api/password and ten passwords ranging from 10 to 50 characters from
-http://prod.box1.com/api/password.  Now hit Refresh many times really fast.  You should get HTTP code 503 because the
-rate limit has been enabled on the Ingress Controller.  Same should happen if you run the Artillery.io load_test.yaml.
-
-Updating k8s Resources With YAML
+</pre>
+<p>
+Now try to hit <a href="http://prod.box1.com/api/password" target="_blank">http://prod.box1.com/api/password</a> and
+<a href="http://demo.box1.com/api/password" target="_blank">http://demo.box1.com/api/password</a>.  You should get one
+6-8 character password from
+<a href="http://demo.box1.com/api/password" target="_blank">http://demo.box1.com/api/password</a> and ten passwords
+ranging from 10 to 50 characters from
+<a href="http://prod.box1.com/api/password" target="_blank">http://prod.box1.com/api/password</a>.  Now hit Refresh
+many times really fast.  You should get HTTP code 503 because the rate limit has been enabled on the Ingress
+Controller.  Same should happen if you run the Artillery.io load_test.yaml.
+<p>
+<h2>Updating k8s Resources With YAML</h2>
+<p>
 Let's say you want to be generous and allow 2 passwords to be generated per request for the demo pod.  Edit the
-password-policy-cm.yaml file and change demo.password.count to 2 and save.  You can compare the difference between
-what is configured in k8s and your file changes by running:
-
-kubectl diff -f password-policy-cm.yaml
-
+<span class="mono"> password-policy-cm.yaml </span>file and change demo.password.count to 2 and save.  You can compare
+the difference between what is configured in k8s and your file changes by running:
+<p>
+<pre> kubectl diff -f password-policy-cm.yaml</pre>
+<p>
 Now update password-policy ConfigMap by calling:
-
-kubectl apply -f password-policy-cm.yaml
-
+<p>
+<pre> kubectl apply -f password-policy-cm.yaml</pre>
+<p>
 Unfortunately, we still have to reboot the demo pod to load the new configuration value.  We have Spring Actuator
 configured, so call the POST API http://demo.box1.com/actuator/shutdown to gracefully shutdown Spring Boot, which will
-trigger k8s to restart the pod with the updated configuration value.  Revisit http://demo.box1.com/api/password and we
-now get 2 passwords generated.
+trigger k8s to restart the pod with the updated configuration value.  Revisit
+<a href="http://demo.box1.com/api/password" target="_blank">http://demo.box1.com/api/password</a> and we now get 2
+passwords generated.
+<p style="font-size: 16px">
+    If you have any questions about this demo, send me a Tweet
+    <a href="https://twitter.com/mattrr78" target="_blank">@mattrr78</a>!
+</body>
+</html>
